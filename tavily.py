@@ -21,3 +21,4 @@ def _tavily_search(query: str, max_results: int ) -> list[dict]:
         )
     return normalized
 
+
