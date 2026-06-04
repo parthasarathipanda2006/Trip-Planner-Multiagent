@@ -28,7 +28,7 @@ class flight_state(TypedDict):
     outbound_date:str
     preference:list[str]
     iata:Iata
-    response:str
+    flight_recommendation:str
 
 def IATA(state:flight_state):
 
@@ -170,7 +170,7 @@ def flight_data(state:flight_state):
             )
         ]
     )
-    return {"response":new_res.content}
+    return {"flight_recommendation":new_res.content}
 graph=StateGraph(flight_state)
 graph.add_node("iata",IATA)
 graph.add_node("flight",flight_data)

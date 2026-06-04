@@ -20,13 +20,18 @@ def serp_hotel(check_in:str,check_out:str,place:str,adults:int):
     search = GoogleSearch(params)
     results = search.get_dict()
     hotels = results.get("properties", [])
-
+    #print(f"{hotels[1]}\n\n")
+    #print(f"{hotels[1].keys()}\n\n")
     normalized:list[dict]=[]
     for hotel in hotels :
         normalized.append(
             {
                 "hotel_name":hotel.get('name'),
-                "description":hotel.get("description"),
+                "total_rate":hotel.get('total_rate'),
+                "description": (
+                                    hotel.get("description")
+                                    or ", ".join(hotel.get("amenities", []))
+                                ),
                 "hotel_claass":hotel.get("hotel_class"),
                 "overal_rating":hotel.get("overall_rating"),
                 "location_rating":hotel.get("location_rating"),
@@ -35,4 +40,4 @@ def serp_hotel(check_in:str,check_out:str,place:str,adults:int):
             }
         )
     return normalized    
-print(serp_hotel("2026-06-07","2026-06-10","dubai",3))
+#print(serp_hotel("2026-06-07","2026-06-10","dubai",3))
