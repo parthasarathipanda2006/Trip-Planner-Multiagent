@@ -10,6 +10,9 @@ from langgraph.graph.message import add_messages
 from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
 import os 
+from flight_agent import flight_agent
+from activity_agent import activity_agent
+from hotel_agent import hotel_agent
 
 load_dotenv()
 
@@ -61,6 +64,9 @@ class input_schema(BaseModel):
 class ParentState(TypedDict):
     input_state:input_schema
     message_hist:Annotated[list[BaseMessage],add_messages]
+    flight_recommendation:list[str]
+    hotel_recommendation:list[str]
+    activity_recommendation:list[str]
 
 chat_prompt="""
             You are the Travel Chat Agent.
@@ -316,6 +322,41 @@ def router(state:ParentState):
     return {"input_state":response}
    
 
+def flight(state:ParentState):
+
+    response=flight_agent.invoke(
+        {
+            "origin_place":state["input_state"].origin,
+            "destination_place":state["input_state"].destination,
+            "outbound_date":state["input_state"].departure_date,
+            "preference":state["input_state"].flight_preference
+        }
+    )
+    return {"flight_recommendation":response}
+
+def activity(state:ParentState):
+    
+    response=activity_agent.invoke(
+        {
+            "place":state["input_state"].destination,
+            "days":state["input_state"].days,
+            "preferences":state["input_state"].activity_preferences
+        }
+    )
+    return {"activity_recommendation":response}
+
+def hotel_agent(state:ParentState):
+    response=hotel_agent.invoke(
+        {
+            "place":state["input_state"].destination,
+            "checkin_date":state["input_state"].departure_date,
+            "checkout_date":"2026-06-15",
+            "adults":state["input_state"].days,
+            "preferences":state["input_state"].hotel_preference
+        }
+    )
+    return {"hotel_recommendation":response}
+
 graph=StateGraph(ParentState)
 
 graph.add_node("chat",chat_agent)
@@ -333,7 +374,7 @@ config = {
 }
 print(agent.invoke({"input_state": input_schema(),
         "message_hist": [
-            HumanMessage(content="7 th october 2026")
+            HumanMessage(content="i will prefer 5 star hotel and economy class flight")
         ]},config=config))
 
 
