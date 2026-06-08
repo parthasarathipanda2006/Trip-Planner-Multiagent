@@ -4,7 +4,7 @@ from typing import TypedDict,Annotated,Literal,Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel,Field
 from langchain_core.messages import HumanMessage,BaseMessage,SystemMessage
-from serp_activity import serp_activity
+from tools.serp_activity import serp_activity
 import os 
 
 load_dotenv()
