@@ -14,14 +14,15 @@ llm = ChatGroq(
     api_key=os.getenv("GROQ_API_KEY"),
     temperature=0
 )
+
 class hotel_state(TypedDict):
     place:str
     checkin_date:str
     checkout_date:str
     adults:int
     preferences:str
-    hotel_recommendation:list[dict]
-    final_recommend:str
+    hotel_lists:list[dict]
+    hotel_recommendation:str
 
 hotel_prompt="""
             You are an expert hotel recommendation assistant.
@@ -61,7 +62,8 @@ hotel_prompt="""
             1. Analyze all hotels.
             2. Compare them against the user's preferences.
             3. Rank the hotels from best to worst.
-            4. Recommend at most 5 hotels.
+            4. Recommend at most 5 hotels.If fewer than 5 hotels strongly match the user's preferences,
+               fill the remaining recommendations with hotels that best approximate the user's preferences and clearly note any trade-offs.
             5. Never recommend the same hotel twice.
             6. Never invent hotel information.
             7. Use only the provided hotel data.
@@ -83,25 +85,32 @@ hotel_prompt="""
             - Business travel → prioritize good location, amenities, and ratings.
             - Airport access → prioritize hotels with airports in nearby_places.
 
-            Output Rules:
+           Guidelines for `match_reason`:
 
-            - Return AT MOST 5 recommendations.
-            - If fewer than 5 hotels satisfy the preferences, return only the matching hotels.
-            - Do not repeat hotels.
-            - Do not explain your ranking process.
+            * Write as if you are personally recommending the hotel to the traveler.
+            * Use natural, conversational language rather than listing features.
+            * Explain why the hotel is a good fit for the user's preferences.
+            * Mention the most important strengths first (location, price, rating, nearby attractions, etc.).
+            * If there are trade-offs, explain them naturally.
+            * Avoid generic phrases such as "good hotel" or "recommended option."
+            * Keep the explanation concise .
 
-            For each recommendation provide:
+            Examples:
 
-            1. Hotel Name
-            2. Total Cost
-            3. Overall Rating
-            4. Location Rating
-            5. Hotel Class
-            6. Nearby Places
-            7. Why it matches the user's preferences
+            "Great choice if you want to stay close to the city center. The hotel has strong guest ratings and several popular attractions are within walking distance."
+
+            "This is one of the best value options for your dates. While it is slightly farther from the main tourist area, it offers a lower price without sacrificing overall quality."
+
             """
-def hotel_node(state:hotel_state):
+def hotel_list(state:hotel_state):
+
     hotel_list=serp_hotel(state["checkin_date"],state["checkout_date"],state["place"],state["adults"])
+
+    return {"hotel_lists":hotel_list}
+
+def hotel_node(state:hotel_state):
+    
+    print("hotel done")
     response=llm.invoke(
         [
             SystemMessage(
@@ -109,28 +118,21 @@ def hotel_node(state:hotel_state):
             ),
             HumanMessage(
                 content=(
-                    f"Hotel Data: {hotel_list}"
+                    f"Hotel Data: {state["hotel_lists"]}"
                     f"my preferences: {state["preferences"]}"
                 )
             )
         ]
     )
-    return {"final_recommend":response.content,"hotel_recommendtions":hotel_list}
+    return {"hotel_recommendation":response.content}
 
 graph=StateGraph(hotel_state)
 graph.add_node("hotel",hotel_node)
+graph.add_node("list",hotel_list)
 
-graph.add_edge(START,"hotel")
+graph.add_edge(START,"list")
+graph.add_edge("list","hotel")
 graph.add_edge("hotel",END)
 
 hotel_agent=graph.compile()
 
-print(hotel_agent.invoke(
-    {
-        "place":"singapore",
-        "checkin_date":"2026-06-08",
-        "checkout_date":"2026-06-15",
-        "adults":2,
-        "preferences":"5 star hotel with swimming pool"
-    }
-).get('final_recommend'))

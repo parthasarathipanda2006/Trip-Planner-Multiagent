@@ -27,17 +27,17 @@ def serp_flight(Departure_id:str,Arrival_id:str,Outbound_date:str):
                 "total_price":f.get("price") or "" ,
                 "total_duration":f.get("total_duration") or "",
                 "layovers":len(f.get("layovers",[])) or None,
-                "ticket extensions":f.get("extensions") or "",
+                "ticket extensions":f.get("extensions",[]) or f.get('flight_extension',[]) or[],
                 "departure_airport":f.get('flights')[0].get("departure_airport").get("name"),
                 "arrival_airport":f.get('flights')[-1].get("arrival_airport").get("name"),
                 "departure_time":f.get('flights')[0].get("departure_airport").get("time"),
                 "arrival_time":f.get('flights')[-1].get("arrival_airport").get("time"),
-                "segment":[
+                "segments":[
                     {
                         "travel_class":flight.get("travel_class"),
                         "flight_name":flight.get('airplane'),
                         "airline":flight.get('airline'),
-                        "flight_extension":flight.get("extensions")
+                        "flight_extension":flight.get("extensions",[]) or flight.get('flight_extension',[]) or []
                     }
                     for flight in f.get('flights')
                 ]
@@ -45,3 +45,4 @@ def serp_flight(Departure_id:str,Arrival_id:str,Outbound_date:str):
             }
         )
     return Normalized[:10]
+#print(serp_flight('BOM','DEL','2026-10-07'))

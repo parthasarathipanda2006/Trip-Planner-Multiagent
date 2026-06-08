@@ -18,7 +18,9 @@ class activity_state(TypedDict):
     place:str
     days:int
     preferences:list[str]
+    activity:list[dict]
     recommendation:str
+
 activity_prompt="""
                 You are an expert travel itinerary planner.
 
@@ -71,42 +73,33 @@ activity_prompt="""
                 - Nightlife → prioritize evening activities and entertainment districts.
                 - Family → prioritize family-friendly attractions.
                 - Luxury → prioritize premium experiences and high-end attractions.
-                Output format:
+                Output Rules:
 
-                Destination: <destination>
+                - Return ONLY data required by the ActivityItinerary schema.
+                - Do not return markdown.
+                - Do not return bullet points.
+                - Do not return a day-by-day text itinerary.
+                - Do not return explanations outside schema fields.
+                - Generate one DayPlan object for each day.
+                - Use the morning, afternoon, and evening fields for activities.
+                - Include attraction costs when available.
+                - Include a TripSummary object.
 
-                Day 1
-                Morning:
-                - Attraction Name
-                - Why it was selected
+                For each activity provide:
+                - attraction_name
+                - reason
+                - estimated_cost
 
-                Afternoon:
-                - Attraction Name
-                - Why it was selected
-
-                Evening:
-                - Attraction Name
-                - Why it was selected
-
-                Estimated Cost:
-                - Attraction 1: ...
-                - Attraction 2: ...
-
-                Day 2
-                ...
-
-                After the itinerary, provide:
-
-                Trip Summary:
-                - Total attractions planned
-                - Highest-rated attraction
-                - Approximate total attraction cost (if price data is available)
-                - Special notes based on user preferences
+                Return a valid ActivityItinerary object.
 
                 """
-def activity_node(state:activity_state):
+def tourist_list(state:activity_state):
 
     tourist_places=serp_activity(f"top 10 tourist attractions in {state["place"]}")
+
+    return {"activity":tourist_places}
+
+def activity_node(state:activity_state):
 
     response=llm.invoke(
         [
@@ -116,18 +109,21 @@ def activity_node(state:activity_state):
                     f"destination: {state["place"]}"
                     f"trip length: {state["days"]}"
                     f"preferences:{state["preferences"]}"
-                    f"Tourist Attraction Data:{tourist_places}"
+                    f"Tourist Attraction Data:{state["activity"]}"
                 )
             )
         ]
     )
     return {"recommendation":response.content}
+
 graph=StateGraph(activity_state)
 graph.add_node("activity",activity_node)
+graph.add_node("list",tourist_list)
 
-graph.add_edge(START,"activity")
+graph.add_edge(START,"list")
+graph.add_edge("list","activity")
 graph.add_edge("activity",END)
 
 activity_agent=graph.compile()
 
-print(activity_agent.invoke({"place":"dubai","days":4,"preferences":["swmming"]})["recommendation"])
+#print(activity_agent.invoke({"place":"dubai","days":4,"preferences":["swmming"]})["recommendation"])
