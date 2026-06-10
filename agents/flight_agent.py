@@ -178,12 +178,6 @@ def flight_data(state:flight_state):
         ]
     )
     return {"flight_recommendation":new_res.content}
-
-def condition(state:flight_state):
-    if state["is_needed"]:
-        return "flight"
-    else: return END
-
 graph=StateGraph(flight_state)
 graph.add_node("iata",IATA)
 graph.add_node("list",flight_list)
@@ -196,4 +190,4 @@ graph.add_edge("flight",END)
 
 flight_agent=graph.compile()
 
-#print(flight_agent.invoke({"origin_place":"BOM","destination_place":"DEL","outbound_date":'2026-10-07',"preference":["indigo","refund"]})["flight_recommendation"])
+#print(flight_agent.invoke({"origin_place":"BOM","destination_place":"DXB","outbound_date":'2026-10-12',"preference":["economy class"]})["flight_recommendation"])

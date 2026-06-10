@@ -45,4 +45,3 @@ def serp_flight(Departure_id:str,Arrival_id:str,Outbound_date:str):
             }
         )
     return Normalized[:10]
-#print(serp_flight('BOM','DEL','2026-10-07'))

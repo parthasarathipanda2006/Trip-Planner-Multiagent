@@ -3,16 +3,16 @@ from langgraph.graph import StateGraph,START,END
 from typing import TypedDict,Annotated,Literal,Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel,Field
-from langchain_core.messages import HumanMessage,BaseMessage,SystemMessage,AIMessage
+from langchain_core.messages import HumanMessage,BaseMessage,SystemMessage,AIMessage,ToolMessage
 from tools.serp_hotel import serp_hotel
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
 import os 
-from flight_agent import flight_agent
-from activity_agent import activity_agent
-from hotel_agent import hotel_agent
+from agents.flight_agent import flight_agent
+from agents.activity_agent import activity_agent
+from agents.hotel_agent import hotel_agent
 from langgraph.types import Send
 from datetime import datetime, timedelta
 
@@ -109,6 +109,12 @@ chat_prompt="""
             * if the fields required by  the current intents are filled make completed=True if not filled make completed=False
             * if user ask to plan the whole trip then only you should ask for the all the requirements one by one.
               and will set the intent=["flight","hotel","activity"] all of them.
+            * If the user is asking about or referring to data already in the conversation history
+                (eg. "from the flights you suggested", "which hotel did you recommend", "best flight from before"): 
+                - Answer directly from the conversation history in your response field
+                - DO NOT trigger any new agent searches
+                - DO NOT add new intent
+            * if intent is null keep completed false.
             * Gather complete requirements and then allow specialized agents to continue.
 
             You MUST use the entire conversation history when interpreting the user's latest message.
@@ -272,76 +278,6 @@ chat_prompt="""
             "completed":False
             }}
 
-            Conversation:
-
-            User: Find hotels in Dubai.
-
-            Current State:
-
-            {{
-            "destination": "Dubai",
-            "check_in_date": null,
-            "check_out_date": null,
-            "days": null,
-            "adults": null
-            "hotel_preferences":null
-            }}
-
-            Output:
-
-            {{
-            "intent":[ "hotel"],
-            "response": "What is your check-in date?"
-            "completed":False
-            }}
-
-            Conversation:
-
-            User: Plan activities and hotels in Dubai.
-
-            Current State:
-
-            {{
-            "destination": "Dubai",
-            "days": null,
-            "check_in_date": null,
-            "check_out_date": null,
-            "activity_preferences":null,
-            "hotel_preferences":null
-            }}
-
-            Output:
-
-            {{
-            "intent": ["activity","hotel"]
-            "response": "How many days will you be staying in Dubai?"
-            "completed":False
-            }}
-
-            Conversation:
-
-            User: Plan a trip from Delhi to Dubai.
-
-            Current State:
-
-            {{
-            "origin": "Delhi",
-            "destination": "Dubai",
-            "departure_date": null,
-            "days": null
-            "flight_preferences":null
-            "hotel_preferences":null
-            "activity_preferences":null
-            }}
-
-            Output:
-
-            {{
-            "intent": ["flight","hotel","activity"],
-            "response": "What date would you like to start your trip?"
-            "completed":False
-            }}
-
             Return ONLY valid pydantic object:
 
             {{
@@ -366,18 +302,18 @@ def chat_agent(state:ParentState):
                 SystemMessage(
                     content=chat_prompt.format(
                             state=state["input_state"],
-                            messages=state["message_hist"]
+                            messages=state["message_hist"][:-1]
                         )
                 ),
-                HumanMessage(
-                    content=(
-                        f"{state["message_hist"][-1]}"
-                    )
-                )
+                    f"{state["message_hist"][-1]}"
+
             ]
         )
-    return {"message_hist":[AIMessage(response.response)],"intent":response.intent,"completed":response.completed}
-
+    if response.completed==False:
+        return {"message_hist":[AIMessage(response.response)],"intent":response.intent,"completed":response.completed}
+    else:
+        return {"intent":response.intent,"completed":response.completed}
+    
 router_prompt="""
                 You are a Travel Information Extraction Agent.
 
@@ -440,8 +376,8 @@ def router(state:ParentState):
    
 def planner(state:ParentState):
 
-    intents=state["intent"]
-    if state["completed"]:
+    intents=state["intent"] or None
+    if state["completed"]==True and intents is not None:
         return [
             Send(intent,state)
             for intent in intents
@@ -489,105 +425,6 @@ def hotel(state:ParentState):
     )
     return {"hotel_recommendation":response["hotel_recommendation"]}
 
-itinerary_prompt="""
-                You are an Expert Travel Recommendation and Itinerary Agent.
-
-                You receive:
-
-                1. User trip information.
-                2. Flight recommendations (optional).
-                3. Hotel recommendations (optional).
-                4. Activity recommendations (optional).
-                5. A list of available components.
-
-                Available components may contain any combination of:
-
-                ["flight"]
-                ["hotel"]
-                ["activity"]
-                ["flight", "hotel"]
-                ["flight", "activity"]
-                ["hotel", "activity"]
-                ["flight", "hotel", "activity"]
-
-                Your job is to create a single, polished, user-friendly travel recommendation based ONLY on the components provided.
-
-                Rules:
-
-                1. Use ONLY the supplied recommendations.
-                2. Never invent flights, hotels, activities, prices, ratings, locations, or schedules.
-                3. If a component is not provided, do not mention it.
-                4. Combine all available recommendations into one coherent response.
-                5. Prioritize the options that best match the user's stated preferences.
-                6. Explain why a recommendation is suitable for the user.
-                7. Present information naturally like a professional travel consultant.
-                8. If multiple recommendations are available within a component, summarize the best options.
-                9. Make the final response concise but informative.
-                10. Focus on helping the user make a decision.
-                11. Do not expose raw JSON or internal data structures.
-                12. If only one component is provided, produce a high-quality recommendation for that component only.
-                13. If two components are provided, integrate them naturally into a single recommendation.
-                14. If all three components are provided, create a complete trip recommendation.
-
-                Trip Information:
-                {trip_information}
-
-                Available Components:
-                {available_components}
-
-                Flight Recommendations:
-                {flight_recommendations}
-
-                Hotel Recommendations:
-                {hotel_recommendations}
-
-                Activity Recommendations:
-                {activity_recommendations}
-
-                Response Guidelines:
-
-                If flights are available:
-                - Summarize the best flight options.
-                - Mention price, duration, layovers, and important benefits.
-                - Explain why the recommendation fits the user's preferences.
-
-                If hotels are available:
-                - Summarize the best hotel options.
-                - Mention rating, location, nearby attractions, and notable amenities.
-                - Explain why the recommendation fits the user's preferences.
-
-                If activities are available:
-                - Summarize the planned activities or attractions.
-                - Highlight experiences that match the user's interests.
-                - Mention estimated costs when available.
-
-                If multiple components are available:
-                - Present them as one integrated travel recommendation.
-                - Ensure smooth transitions between sections.
-                - Help the user understand how the recommendations work together.
-
-                Response Structure:
-
-                # Travel Recommendation
-
-                Brief personalized introduction.
-
-                ## Flights
-                (only if flight recommendations are available)
-
-                ## Hotels
-                (only if hotel recommendations are available)
-
-                ## Activities
-                (only if activity recommendations are available)
-
-                ## Recommendation Summary
-
-                A concise summary explaining why these recommendations are a good fit for the user and what the user should consider next.
-
-                Generate a professional, user-friendly response.
-                """
-
 def itinerary_node(state:ParentState):
 
 
@@ -597,8 +434,7 @@ def itinerary_node(state:ParentState):
         "activity":state.get("activity_recommendation",[])
     }
     text=f"\n{dict["flight"]}\n{dict["hotel"]}\n{dict["activity"]}"
-    return {"message_hist":[text]}
-
+    return {"message_hist":[AIMessage(content=text)],"intent":None,"completed":False,"flight_recommendation":None,"hotel_recommendation":None,"activity_recommendation":None}
 
 graph=StateGraph(ParentState)
 
@@ -622,14 +458,3 @@ graph.add_edge("activity","iti")
 graph.add_edge("iti",END)
 
 agent=graph.compile(checkpointer=checkpointer)
-config = {
-    "configurable": {
-        "thread_id": "user_1"
-    }
-}
-response=agent.invoke({"input_state": input_schema(),
-        "message_hist": [
-            HumanMessage(content="sure")
-        ]},config=config)
-
-print(response["message_hist"][-1])
